@@ -1,0 +1,22 @@
+# Private audit data — NEVER commit to public repo
+private/
+*.xlsx
+*.csv
+*.json
+!.github/**/*.md
+
+# Secrets
+.env
+*.key
+*.pem
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
