@@ -1,0 +1,312 @@
+# Verification Guide: Confirming AI Agent Claims
+
+A practical guide for verifying what your AI agent actually did versus what it claims to have done. Organized by claim type with specific commands and techniques.
+
+## Principle: Verify Then Trust
+
+The default relationship with AI agents should be **verify-first**. Don't build on claimed work until you've confirmed it exists. One unverified hallucination becomes the foundation for the next ten.
+
+---
+
+## Pre-Session Verification
+
+Before starting any work session, confirm the basics:
+
+### Environment Identity
+```bash
+# What machine are we actually on?
+hostname
+uname -a
+
+# What OS?
+cat /etc/os-release | head -5
+
+# What hardware is available?
+lspci | grep -i vga          # GPU
+free -h                       # RAM
+df -h /                       # Disk
+nproc                         # CPU cores
+```
+
+**Why**: The most damaging hallucination in this audit involved the Agent lying about which machine it was on. A 10-second check prevents this entirely.
+
+### Tool Availability
+```bash
+# Check claimed tools actually exist
+which <tool-name>
+<tool-name> --version
+
+# Examples:
+which ollama && ollama --version
+which python3 && python3 --version
+which node && node --version
+which docker && docker --version
+```
+
+**Why**: Agents will claim to use tools that aren't installed. Verify before assigning tool-dependent tasks.
+
+---
+
+## Verifying File Claims
+
+When the Agent claims to have created, modified, or updated a file:
+
+### File Existence
+```bash
+# Does it exist?
+ls -la /path/to/claimed/file
+
+# What's in it?
+cat /path/to/claimed/file
+
+# When was it last modified?
+stat /path/to/claimed/file
+
+# Is it empty?
+wc -l /path/to/claimed/file
+```
+
+### File Content
+```bash
+# Show the first/last lines
+head -20 /path/to/file
+tail -20 /path/to/file
+
+# Search for specific content the agent claimed to add
+grep "expected content" /path/to/file
+
+# Compare against a known state
+diff /path/to/file /path/to/backup
+```
+
+### Batch File Check
+```bash
+# Check multiple claimed files at once
+for f in file1.md file2.py file3.json; do
+  if [ -f "$f" ]; then
+    echo "✅ $f ($(wc -l < "$f") lines)"
+  else
+    echo "❌ $f — NOT FOUND"
+  fi
+done
+```
+
+---
+
+## Verifying Command Execution Claims
+
+When the Agent claims to have run commands or installed software:
+
+### Installation Verification
+```bash
+# Package installed?
+dpkg -l | grep <package-name>    # Debian/Ubuntu
+rpm -qa | grep <package-name>    # RHEL/Fedora
+
+# Binary exists?
+which <command>
+type <command>
+
+# Correct version?
+<command> --version
+```
+
+### Service Verification
+```bash
+# Service running?
+systemctl status <service-name>
+
+# Process exists?
+ps aux | grep <process-name>
+pgrep -a <process-name>
+
+# Listening on claimed port?
+ss -tlnp | grep <port>
+netstat -tlnp | grep <port>
+```
+
+### Cron Job Verification
+```bash
+# User cron jobs
+crontab -l
+
+# System cron
+ls -la /etc/cron.d/
+cat /etc/cron.d/<claimed-cron-file>
+```
+
+---
+
+## Verifying Configuration Claims
+
+When the Agent claims to have configured something:
+
+### Config File Check
+```bash
+# Read the actual config
+cat /path/to/config.json
+
+# Check for specific keys
+grep -i "api_key\|model\|endpoint" /path/to/config
+
+# Validate JSON
+python3 -m json.tool /path/to/config.json
+```
+
+### Environment Variable Check
+```bash
+# Check if set
+echo $VARIABLE_NAME
+env | grep VARIABLE_NAME
+```
+
+### API Connectivity Check
+```bash
+# Test an API endpoint
+curl -s https://api.example.com/health
+curl -s -o /dev/null -w "%{http_code}" https://api.example.com/endpoint
+```
+
+---
+
+## Verifying GPU/Hardware Claims
+
+When the Agent claims specific hardware stats:
+
+### GPU Verification
+```bash
+# Full GPU status
+nvidia-smi
+
+# Specific metrics
+nvidia-smi --query-gpu=name,memory.total,memory.used,temperature.gpu,utilization.gpu --format=csv,noheader
+
+# Continuous monitoring (1-second intervals)
+nvidia-smi -l 1
+
+# GPU stress test
+gpu-burn 60    # if installed
+```
+
+### System Resources
+```bash
+# RAM
+free -h
+
+# Disk
+df -h
+
+# CPU
+lscpu | head -20
+cat /proc/cpuinfo | grep "model name" | head -1
+```
+
+---
+
+## Verifying Code Claims
+
+When the Agent claims to have written working code:
+
+### Script Exists and Runs
+```bash
+# Exists?
+ls -la /path/to/script.py
+
+# Readable?
+head -30 /path/to/script.py
+
+# Syntax valid?
+python3 -c "import py_compile; py_compile.compile('/path/to/script.py')"
+
+# Actually runs?
+python3 /path/to/script.py --help 2>&1 | head -10
+```
+
+### Find Claimed Files
+```bash
+# Search for scripts by name
+find ~ -maxdepth 4 -name "claimed_script*" 2>/dev/null
+
+# Search for any Python files
+find ~ -maxdepth 4 -name "*.py" 2>/dev/null | head -20
+
+# Search for files modified recently
+find ~ -maxdepth 4 -mtime -1 -name "*.py" 2>/dev/null
+```
+
+---
+
+## The Clean Room Verification
+
+After a trust breach (discovering systematic hallucination), run a comprehensive system audit:
+
+```bash
+#!/bin/bash
+echo "=== CLEAN ROOM VERIFICATION ==="
+echo "Date: $(date)"
+echo "Host: $(hostname)"
+echo "Kernel: $(uname -a)"
+echo ""
+
+echo "=== HARDWARE ==="
+lspci | grep -i vga
+nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null
+free -h | head -2
+df -h / | tail -1
+
+echo ""
+echo "=== CLAIMED FILES ==="
+# Replace with your agent's claimed file paths
+for f in /path/to/claimed/file1 /path/to/claimed/file2; do
+  if [ -f "$f" ]; then
+    echo "✅ $f ($(wc -l < "$f") lines)"
+  else
+    echo "❌ $f — NOT FOUND"
+  fi
+done
+
+echo ""
+echo "=== CLAIMED TOOLS ==="
+for tool in ollama python3 node docker; do
+  if which $tool &>/dev/null; then
+    echo "✅ $tool: $(which $tool)"
+  else
+    echo "❌ $tool: NOT INSTALLED"
+  fi
+done
+
+echo ""
+echo "=== RUNNING SERVICES ==="
+ps aux | grep -E "relevant|process|names" | grep -v grep
+
+echo ""
+echo "=== CRON JOBS ==="
+crontab -l 2>/dev/null || echo "NO CRONTAB"
+
+echo ""
+echo "=== VERIFICATION COMPLETE ==="
+```
+
+Customize the file paths and process names for your specific setup, then run after any trust breach to establish ground truth.
+
+---
+
+## Verification Habits
+
+### Every Session
+- Confirm environment identity (`hostname`, `uname -a`)
+- Verify critical tools are available
+
+### Every Task Completion
+- Demand at least one artifact (file content, command output, process ID)
+- Apply the [Red Flag Checklist](04-red-flag-checklist.md)
+
+### Weekly
+- Run a Clean Room Verification
+- Audit the task log for repetition patterns
+- Spot-check 3 random completed tasks
+
+### After Any Caught Hallucination
+- Audit all tasks from the same time period
+- Run the full Clean Room Verification
+- Assume neighboring tasks are also fabricated until verified
