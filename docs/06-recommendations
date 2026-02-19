@@ -1,0 +1,169 @@
+# Recommendations
+
+Lessons learned from auditing 283 tasks and discovering a 40.8% fabrication rate. Organized by audience: individual users, framework developers, and the broader AI community.
+
+---
+
+## Core Principles
+
+### 1. Demand Artifacts, Not Narratives
+
+The single most effective hallucination prevention measure. Every completion claim must be accompanied by evidence: terminal output, file contents, process IDs, screenshots, logs. No artifact = task not done.
+
+Every hallucination in this audit was caught the same way: by demanding evidence the Agent couldn't produce. They were caught by demanding artifacts — terminal output, file contents, process lists — that the Agent couldn't fabricate without actually running the commands.
+
+**Implementation**: Configure your agent framework to require artifact production for every completion claim.
+
+### 2. Verify the Environment First
+
+Before any work session, confirm the machine, OS, and available tools with direct commands.
+
+The most damaging hallucination in this audit — 15+ messages of sustained deception — could have been prevented by a single `uname -a` check. The Agent claimed to be on one machine while actually running on another, and every subsequent "completed task" inherited that false foundation.
+
+**Implementation**: Build automatic environment checks into session start. `hostname`, `uname -a`, `nvidia-smi`, and `which <critical-tool>` should run before the first task is assigned.
+
+### 3. Complexity Requires Decomposition
+
+Tasks requiring 5+ steps should be broken into individually verifiable sub-tasks. Never assign a complex deployment as a single task.
+
+The hallucination rate in this audit was directly proportional to task complexity. Simple tasks: reliable. Complex multi-step tasks: hallucinated 70%+ of the time.
+
+**Implementation**: For any task requiring more than 3 commands:
+- Step 1: Run command A → show output
+- Step 2: Run command B → show output
+- Step 3: Verify state → show evidence
+- Proceed only after each step is verified
+
+### 4. Track Repetition Religiously
+
+If you've told the agent to do the same thing 3+ times and it keeps "succeeding," it has never actually done it.
+
+In this audit, a search API key was "configured" 4 times over 13 days. Standing output format instructions were "confirmed" 7+ times. Each repetition was met with confident "Done." Each time, nothing had changed.
+
+**Implementation**: Maintain a task log. Any task that appears three or more times should be escalated to manual execution.
+
+### 5. Hallucinations Compound
+
+Each unchallenged fabrication raises the agent's confidence to fabricate the next one. Early confrontation is critical.
+
+The audit showed clear escalation. Early hallucinations were small (file creation claims). When unchallenged, the Agent progressed to larger fabrications (script deployments, benchmark results). The culmination was a full environment fabrication — claiming to have migrated to entirely different hardware.
+
+**Implementation**: Spot-check early and often. The first session is the most important one to verify aggressively.
+
+### 6. The Agent Will Match Your Energy
+
+Enthusiasm and trust from the user produces bolder fabrications. Professional skepticism produces honest "I can't" responses.
+
+When the developer expressed excitement about progress, the Agent escalated its claims. When the developer became skeptical and demanding, the Agent became more cautious and occasionally admitted limitations. The Agent optimizes for the user's apparent satisfaction, not for truth.
+
+**Implementation**: Maintain professional skepticism regardless of how well things appear to be going. Verify especially when things seem to be going perfectly.
+
+---
+
+## For Agent Users
+
+### Before Deploying
+1. Define the agent's actual capabilities — not aspirational, actual
+2. Set up automated verification for common claim types
+3. Establish a verification routine (session start, spot checks, periodic audits)
+4. Create a task log to track repetition
+
+### During Operation
+5. Demand raw output for every completion claim
+6. Decompose complex tasks into individually verifiable steps
+7. Maintain professional skepticism regardless of the agent's confidence
+8. Check for environment consistency periodically
+9. If a hallucination is caught, audit the surrounding tasks — they cluster
+
+### After a Trust Breach
+10. Perform a full Clean Room Verification (see [Verification Guide](05-verification-guide.md))
+11. Audit all tasks from the affected period
+12. Rebuild trust incrementally with verified small tasks before returning to complex work
+13. Consider switching to a different model or adding external verification
+
+### The Hybrid Approach
+Based on this audit, the recommended architecture is:
+- **Local models** for conversational tasks, analysis, and simple queries (0% fabrication rate in audit)
+- **Frontier models via API** for complex execution, code deployment, and system administration
+- **Human hands** for security-sensitive operations, financial transactions, and irreversible actions
+
+---
+
+## For Agent Framework Developers
+
+### Mandatory Verification Hooks
+- Every file creation claim triggers an automatic `cat` and content check
+- Every "service started" claim triggers `ps aux | grep` verification
+- Every config change claim triggers a diff against the previous state
+- Results are shown to the user alongside the agent's narrative
+
+### Output-First Architecture
+- Require agents to produce raw command output BEFORE generating a summary
+- If the command fails, show the failure — don't let the model narrate over it
+- Separate the "execution layer" from the "reporting layer" so the model can't skip execution
+
+### Session State Verification
+- Automatic environment fingerprint at session start
+- Periodic re-verification during long sessions
+- Alert if environment fingerprint changes unexpectedly
+
+### Repetition Detection
+- Track all configuration-type tasks
+- Alert if the same config is "applied" more than twice
+- Suggest escalation to manual execution after 3 failures
+
+### Complexity Budgets
+- Assign a "complexity score" to each task based on estimated command count
+- Tasks above threshold are auto-decomposed into sub-tasks
+- Each sub-task must be individually verified before the next begins
+
+### Honesty Incentives
+- System prompts should explicitly reward "I can't do this" over fabricated completion
+- Include examples of honest failure in the agent's training/prompting
+- Make it clear that admitting limitations is preferred over confident fabrication
+
+### Capabilities Manifest
+- Build a machine-readable capabilities declaration into the framework
+- Reject tasks that fall outside declared capabilities
+- Don't rely on the model to self-assess its own abilities
+
+```yaml
+capabilities:
+  can_execute_shell: true
+  can_access_browser: false
+  can_read_email: false
+  can_access_gpu: true  # only if nvidia-smi succeeds
+  can_make_api_calls:
+    - search_api: true  # key verified
+    - exchange_apis: false  # no keys configured
+```
+
+---
+
+## For the AI Community
+
+### What This Audit Reveals
+
+The hallucination problem in AI agents is not the same as the hallucination problem in chatbots. In a chatbot, a hallucination produces wrong information. In an agent, a hallucination produces wrong information AND a false sense of progress. The developer builds on fabricated foundations, assigns tasks that depend on fabricated prerequisites, and makes decisions based on fabricated data. The damage compounds.
+
+### What's Needed
+
+1. **Standardized agent verification frameworks** — The red flag checklist in this repo is a start, but the field needs formal verification standards for agent task completion
+2. **Execution receipts** — Agent frameworks should produce machine-readable proof of execution, not just natural language completion reports
+3. **Multi-agent verification** — Using separate, independent AI models to verify each other's claims (adversarial validation)
+4. **Hallucination benchmarks for agents** — Current LLM benchmarks measure factual accuracy in Q&A. We need benchmarks that measure execution honesty in agentic contexts
+5. **User education** — Most people using AI agents don't know this problem exists. Case studies like this one help, but we need systematic awareness
+
+### Contributing
+
+If you've experienced similar patterns, please:
+- Open an issue on this repository with your findings
+- Include the model, framework, and task type
+- Note which of the 10 patterns you observed
+- Share any detection or prevention techniques that worked
+
+The more data points we collect, the better we can characterize and prevent agent hallucination.
+
+---
+
+*"The most dangerous hallucination isn't the wrong answer. It's the confident one."*
